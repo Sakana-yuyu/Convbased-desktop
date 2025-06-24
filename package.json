@@ -1,0 +1,72 @@
+{
+  "name": "convbased-desktop",
+  "version": "1.2.0",
+  "description": "Convbased Desktop - 一个基于Electron的桌面应用程序，提供便捷的对话和交互功能",
+  "main": "main.js",
+  "author": "Sakana",
+  "homepage": "https://github.com/sakana/convbased-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sakana/convbased-desktop.git"
+  },
+  "keywords": ["electron", "desktop", "conversation", "chat", "productivity"],
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-portable": "electron-builder --win --config.win.target=portable",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "vue": "^3.3.0",
+    "@vitejs/plugin-vue": "^4.4.0",
+    "vite": "^4.5.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.convbased.desktop",
+    "productName": "Convbased Desktop",
+    "copyright": "Copyright © 2024 Sakana. All rights reserved.",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src",
+      "assets",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "publisherName": "Sakana",
+      "verifyUpdateCodeSignature": false,
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Convbased Desktop",
+      "displayLanguageSelector": false,
+      "installerLanguages": ["zh_CN"],
+      "language": "2052"
+    }
+  }
+}

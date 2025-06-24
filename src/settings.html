@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            overflow: hidden;
+        }
+
+        .container {
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        .settings-content {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .setting-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .setting-label {
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-left: 10px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+
+        .radio-option:hover {
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+
+        .radio-option input[type="radio"] {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .radio-option label {
+            cursor: pointer;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>应用设置</h1>
+        </div>
+        
+        <div class="settings-content">
+            <div class="setting-group">
+                <div class="setting-label">关闭窗口时的行为</div>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="minimize" name="closeAction" value="minimize">
+                        <label for="minimize">最小化到系统托盘</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="exit" name="closeAction" value="exit">
+                        <label for="exit">立即退出应用</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="ask" name="closeAction" value="ask">
+                        <label for="ask">每次询问我的选择</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button class="btn btn-secondary" id="cancelBtn">取消</button>
+                <button class="btn btn-primary" id="saveBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载时获取当前设置
+        window.addEventListener('DOMContentLoaded', () => {
+            window.electronAPI.getSettings().then(settings => {
+                const closeAction = settings.closeAction || 'ask';
+                const radio = document.querySelector(`input[name="closeAction"][value="${closeAction}"]`);
+                if (radio) {
+                    radio.checked = true;
+                }
+            });
+        });
+
+        // 保存按钮点击事件
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const selectedAction = document.querySelector('input[name="closeAction"]:checked');
+            if (selectedAction) {
+                window.electronAPI.saveSettings({
+                    closeAction: selectedAction.value
+                }).then(() => {
+                    window.electronAPI.closeSettings();
+                });
+            }
+        });
+
+        // 取消按钮点击事件
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            window.electronAPI.closeSettings();
+        });
+    </script>
+</body>
+</html>

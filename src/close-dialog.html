@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>关闭选项</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            overflow: hidden;
+        }
+        
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <close-dialog 
+            :visible="dialogVisible" 
+            @confirm="handleConfirm" 
+            @cancel="handleCancel"
+        ></close-dialog>
+    </div>
+
+    <script>
+        // 直接在HTML中实现对话框，不使用Vue组件文件
+        document.addEventListener('DOMContentLoaded', function() {
+            const app = document.getElementById('app');
+            
+            // 创建对话框HTML
+            app.innerHTML = `
+                <div class="dialog-overlay">
+                    <div class="dialog-container">
+                        <div class="dialog-header">
+                            <h3>关闭选项</h3>
+                        </div>
+                        
+                        <div class="dialog-content">
+                            <p class="dialog-message">请选择关闭方式：</p>
+                            
+                            <div class="options">
+                                <label class="option active" id="minimize-option">
+                                    <input type="radio" name="closeAction" value="minimize" checked>
+                                    <div class="option-content">
+                                        <div class="option-text">
+                                            <div class="option-title">最小化到托盘</div>
+                                            <div class="option-desc">应用将在后台运行</div>
+                                        </div>
+                                    </div>
+                                </label>
+                                
+                                <label class="option" id="quit-option">
+                                    <input type="radio" name="closeAction" value="exit">
+                                    <div class="option-content">
+                                        <div class="option-text">
+                                            <div class="option-title">直接关闭</div>
+                                            <div class="option-desc">完全退出应用</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <div class="remember-choice">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="remember-checkbox">
+                                    <span class="checkmark"></span>
+                                    记住我的选择
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="dialog-actions">
+                            <button class="btn btn-secondary" id="cancel-btn">取消</button>
+                            <button class="btn btn-primary" id="confirm-btn">确定</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加样式
+            const style = document.createElement('style');
+            style.textContent = `
+                .dialog-overlay {
+                    position: relative;
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: transparent;
+                }
+                
+                .dialog-container {
+                     background: rgb(68, 70, 72);
+                     border-radius: 16px;
+                     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+                     width: 420px;
+                     min-height: 400px;
+                     overflow: hidden;
+                     animation: dialogSlideIn 0.3s ease-out;
+                 }
+                
+                @keyframes dialogSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: scale(0.9) translateY(-20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: scale(1) translateY(0);
+                    }
+                }
+                
+                .dialog-header {
+                     padding: 20px 24px 16px;
+                     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                 }
+                 
+                 .dialog-header h3 {
+                     margin: 0;
+                     font-size: 18px;
+                     font-weight: 600;
+                     color: white;
+                 }
+                
+                .dialog-content {
+                     padding: 20px 24px;
+                 }
+                 
+                 .dialog-message {
+                     margin: 0 0 20px;
+                     color: rgba(255, 255, 255, 0.8);
+                     font-size: 14px;
+                 }
+                
+                .options {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    margin-bottom: 20px;
+                }
+                
+                .option {
+                     display: block;
+                     cursor: pointer;
+                     border: 2px solid rgba(255, 255, 255, 0.2);
+                     border-radius: 12px;
+                     padding: 16px;
+                     transition: all 0.2s ease;
+                     position: relative;
+                     background: rgba(255, 255, 255, 0.05);
+                 }
+                 
+                 .option:hover {
+                     border-color: #3b82f6;
+                     background: rgba(59, 130, 246, 0.1);
+                 }
+                 
+                 .option.active {
+                     border-color: #3b82f6;
+                     background: rgba(59, 130, 246, 0.15);
+                 }
+                
+                .option input[type="radio"] {
+                    position: absolute;
+                    opacity: 0;
+                    pointer-events: none;
+                }
+                
+                .option-content {
+                    display: flex;
+                    align-items: center;
+                }
+                
+                .option-text {
+                    flex: 1;
+                }
+                
+                .option-title {
+                     font-weight: 600;
+                     color: white;
+                     margin-bottom: 4px;
+                 }
+                 
+                 .option-desc {
+                     font-size: 13px;
+                     color: rgba(255, 255, 255, 0.7);
+                 }
+                
+                .remember-choice {
+                     padding-top: 16px;
+                     border-top: 1px solid rgba(255, 255, 255, 0.1);
+                 }
+                 
+                 .checkbox-label {
+                     display: flex;
+                     align-items: center;
+                     cursor: pointer;
+                     font-size: 14px;
+                     color: rgba(255, 255, 255, 0.9);
+                 }
+                
+                .checkbox-label input[type="checkbox"] {
+                    margin-right: 8px;
+                    width: 16px;
+                    height: 16px;
+                }
+                
+                .dialog-actions {
+                     padding: 16px 24px 20px;
+                     display: flex;
+                     gap: 12px;
+                     justify-content: flex-end;
+                     background: rgba(0, 0, 0, 0.1);
+                     border-radius: 0 0 16px 16px;
+                 }
+                
+                .btn {
+                     padding: 10px 20px;
+                     border-radius: 8px;
+                     border: none;
+                     font-size: 14px;
+                     font-weight: 500;
+                     cursor: pointer;
+                     transition: all 0.2s ease;
+                     min-width: 80px;
+                 }
+                 
+                 .btn-secondary {
+                     background: rgba(255, 255, 255, 0.1);
+                     color: rgba(255, 255, 255, 0.8);
+                     border: 1px solid rgba(255, 255, 255, 0.2);
+                 }
+                 
+                 .btn-secondary:hover {
+                     background: rgba(255, 255, 255, 0.15);
+                     color: white;
+                 }
+                 
+                 .btn-primary {
+                     background: #3b82f6;
+                     color: white;
+                 }
+                 
+                 .btn-primary:hover {
+                     background: #2563eb;
+                     transform: translateY(-1px);
+                 }
+            `;
+            document.head.appendChild(style);
+            
+            // 添加事件监听器
+            const radioButtons = document.querySelectorAll('input[name="closeAction"]');
+            const options = document.querySelectorAll('.option');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const confirmBtn = document.getElementById('confirm-btn');
+            const rememberCheckbox = document.getElementById('remember-checkbox');
+            
+            // 单选按钮变化事件
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    options.forEach(opt => opt.classList.remove('active'));
+                    this.closest('.option').classList.add('active');
+                });
+            });
+            
+            // 点击选项区域选中单选按钮
+            options.forEach(option => {
+                option.addEventListener('click', function() {
+                    const radio = this.querySelector('input[type="radio"]');
+                    radio.checked = true;
+                    options.forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+            
+            // 取消按钮
+            cancelBtn.addEventListener('click', function() {
+                window.electronAPI.sendCloseDialogResult({
+                    action: 'cancel',
+                    remember: false
+                });
+            });
+            
+            // 确定按钮
+            confirmBtn.addEventListener('click', function() {
+                const selectedAction = document.querySelector('input[name="closeAction"]:checked').value;
+                const remember = rememberCheckbox.checked;
+                
+                window.electronAPI.sendCloseDialogResult({
+                    action: selectedAction,
+                    remember: remember
+                });
+            });
+        });
+    </script>
+</body>
+</html>
