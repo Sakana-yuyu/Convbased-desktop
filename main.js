@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, Tray, shell, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -41,6 +41,71 @@ function saveSettings(settings) {
     console.error('保存设置文件失败:', error);
   }
 }
+
+// 添加命令行参数以支持媒体功能
+app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,WebAssembly,WebAssemblyStreaming,WebAssemblyThreads');
+app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
+app.commandLine.appendSwitch('enable-experimental-web-platform-features');
+app.commandLine.appendSwitch('enable-web-bluetooth');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// 网络请求监控和调试
+let requestLog = [];
+function logRequest(details) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    method: details.method,
+    url: details.url,
+    resourceType: details.resourceType,
+    referrer: details.referrer
+  };
+  requestLog.push(logEntry);
+  
+  // 特别关注WASM和音频相关请求
+  if (details.url.includes('.wasm') || 
+      details.url.includes('wasm') || 
+      details.url.includes('audio') || 
+      details.url.includes('noise') || 
+      details.url.includes('denoise') ||
+      details.resourceType === 'media') {
+    console.log('🔍 重要请求:', logEntry);
+  }
+  
+  // 保持日志大小在合理范围内
+  if (requestLog.length > 1000) {
+    requestLog = requestLog.slice(-500);
+  }
+}
+
+function logResponse(details) {
+  const responseEntry = {
+    timestamp: new Date().toISOString(),
+    url: details.url,
+    statusCode: details.statusCode,
+    statusLine: details.statusLine,
+    responseHeaders: details.responseHeaders
+  };
+  
+  // 特别关注WASM和音频相关响应
+  if (details.url.includes('.wasm') || 
+      details.url.includes('wasm') || 
+      details.url.includes('audio') || 
+      details.url.includes('noise') || 
+      details.url.includes('denoise')) {
+    console.log('📥 重要响应:', responseEntry);
+    
+    // 检查是否有错误状态码
+    if (details.statusCode >= 400) {
+      console.error('❌ 请求失败:', details.url, '状态码:', details.statusCode);
+    }
+  }
+}
+app.commandLine.appendSwitch('disable-web-security');
+app.commandLine.appendSwitch('allow-running-insecure-content');
+app.commandLine.appendSwitch('disable-site-isolation-trials');
+app.commandLine.appendSwitch('enable-wasm-threads');
+app.commandLine.appendSwitch('enable-wasm-simd');
+app.commandLine.appendSwitch('js-flags', '--experimental-wasm-threads --experimental-wasm-simd');
 
 // 确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock();
@@ -137,17 +202,87 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true,
+      contextIsolation: false,
       enableRemoteModule: false,
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: true
+      webSecurity: false,
+      allowRunningInsecureContent: true,
+      experimentalFeatures: true,
+      sandbox: false,
+      enableBlinkFeatures: 'MediaStreamTrack,MediaRecorder,AudioWorklet,WebAssembly,SharedArrayBuffer,AudioWorkletGlobalScope',
+      additionalArguments: [
+        '--enable-features=VaapiVideoDecoder,WebAssembly,WebAssemblyStreaming,WebAssemblyThreads',
+        '--disable-features=VizDisplayCompositor,OutOfBlinkCors',
+        '--enable-wasm-threads',
+        '--enable-wasm-simd',
+        '--js-flags=--experimental-wasm-threads --experimental-wasm-simd',
+        '--enable-unsafe-webgpu',
+        '--disable-web-security',
+        '--disable-site-isolation-trials',
+        '--allow-running-insecure-content'
+      ]
     },
     show: false, // 初始不显示，等加载完成后显示
     titleBarStyle: 'default'
   });
 
-  // 设置User-Agent
-  mainWindow.webContents.setUserAgent('convbased-desktop');
+  // 设置User-Agent - 动态获取系统默认User-Agent
+  const os = require('os');
+  const platform = os.platform();
+  const arch = os.arch();
+  const release = os.release();
+  
+  // 根据系统平台生成合适的User-Agent
+let userAgent;
+if (platform === 'win32') {
+  const windowsVersion = release.startsWith('10.') ? '10.0' : '6.1';
+  userAgent = `Mozilla/5.0 (Windows NT ${windowsVersion}; ${arch === 'x64' ? 'Win64; x64' : 'Win32'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
+} else if (platform === 'darwin') {
+  userAgent = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
+} else if (platform === 'linux') {
+  userAgent = `Mozilla/5.0 (X11; Linux ${arch === 'x64' ? 'x86_64' : 'i686'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
+} else {
+  // 默认使用通用User-Agent
+  userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
+}
+  
+  mainWindow.webContents.setUserAgent(userAgent);
+  console.log('设置User-Agent:', userAgent);
+  
+  // 设置网络请求监听器
+  const { session } = require('electron');
+  
+  // 监听所有网络请求
+  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    logRequest(details);
+    callback({});
+  });
+  
+  // 监听所有网络响应
+  session.defaultSession.webRequest.onCompleted((details) => {
+    logResponse(details);
+  });
+  
+  // 监听请求失败
+  session.defaultSession.webRequest.onErrorOccurred((details) => {
+    console.error('🚨 网络请求失败:', {
+      url: details.url,
+      error: details.error,
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  // 添加IPC处理器以便从渲染进程获取请求日志
+  const { ipcMain } = require('electron');
+  ipcMain.handle('get-request-log', () => {
+    return requestLog;
+  });
+  
+  ipcMain.handle('clear-request-log', () => {
+    requestLog = [];
+    console.log('📋 请求日志已清空');
+    return true;
+  });
   
   // 加载目标网页
   mainWindow.loadURL('https://weights.chat/#/auth/register?code=6UMCRj');
@@ -188,6 +323,246 @@ function createWindow() {
   // 页面加载完成后重新设置标题
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.setTitle('Convbased Desktop');
+    
+    // 注入调试代码以支持媒体功能和WebAssembly
+     mainWindow.webContents.executeJavaScript(`
+       // 重写getUserMedia以确保权限
+       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+         const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+         navigator.mediaDevices.getUserMedia = function(constraints) {
+           console.log('getUserMedia called with:', constraints);
+           return originalGetUserMedia(constraints).catch(error => {
+             console.error('getUserMedia error:', error);
+             throw error;
+           });
+         };
+       }
+       
+       // 确保AudioContext可用
+       window.AudioContext = window.AudioContext || window.webkitAudioContext;
+       
+       // 监控音频降噪相关功能
+       console.log('🎵 音频功能检查:');
+       console.log('- AudioContext:', typeof AudioContext);
+       console.log('- MediaDevices:', typeof navigator.mediaDevices);
+       console.log('- getUserMedia:', typeof navigator.mediaDevices?.getUserMedia);
+       console.log('- AudioWorklet:', typeof AudioWorklet);
+       console.log('- SharedArrayBuffer:', typeof SharedArrayBuffer);
+       
+       // 监控所有fetch请求，特别是音频相关的
+       const originalFetch = window.fetch;
+       window.fetch = function(...args) {
+         const url = args[0];
+         if (typeof url === 'string') {
+           if (url.includes('noise') || url.includes('denoise') || url.includes('audio') || url.includes('.wasm')) {
+             console.log('🔍 音频相关请求:', url);
+           }
+         }
+         return originalFetch.apply(this, args).then(response => {
+           if (typeof url === 'string' && (url.includes('noise') || url.includes('denoise') || url.includes('audio') || url.includes('.wasm'))) {
+             console.log('📥 音频相关响应:', url, 'Status:', response.status);
+           }
+           return response;
+         }).catch(error => {
+           if (typeof url === 'string' && (url.includes('noise') || url.includes('denoise') || url.includes('audio') || url.includes('.wasm'))) {
+             console.error('❌ 音频相关请求失败:', url, error);
+           }
+           throw error;
+         });
+       };
+       
+       // 监控AudioWorklet的使用
+       if (typeof AudioContext !== 'undefined') {
+         const OriginalAudioContext = AudioContext;
+         window.AudioContext = function(...args) {
+           const ctx = new OriginalAudioContext(...args);
+           console.log('🎵 AudioContext created:', ctx.state);
+           
+           // 监控addModule调用
+           if (ctx.audioWorklet) {
+             const originalAddModule = ctx.audioWorklet.addModule.bind(ctx.audioWorklet);
+             ctx.audioWorklet.addModule = function(moduleURL, options) {
+               console.log('🔧 AudioWorklet.addModule called:', moduleURL);
+               return originalAddModule(moduleURL, options).then(result => {
+                 console.log('✅ AudioWorklet module loaded successfully:', moduleURL);
+                 return result;
+               }).catch(error => {
+                 console.error('❌ AudioWorklet module failed to load:', moduleURL, error);
+                 throw error;
+               });
+             };
+           }
+           
+           return ctx;
+         };
+         
+         // 复制原型
+         Object.setPrototypeOf(window.AudioContext.prototype, OriginalAudioContext.prototype);
+         Object.setPrototypeOf(window.AudioContext, OriginalAudioContext);
+       }
+       
+       // 检查WebAssembly支持
+        if (typeof WebAssembly !== 'undefined') {
+          console.log('WebAssembly is supported');
+          console.log('WebAssembly.instantiateStreaming:', typeof WebAssembly.instantiateStreaming);
+          
+          // 监控WASM模块加载
+          const originalInstantiate = WebAssembly.instantiate;
+          WebAssembly.instantiate = function(...args) {
+            console.log('WebAssembly.instantiate called with:', args[0]);
+            return originalInstantiate.apply(this, args).then(result => {
+              console.log('WebAssembly module instantiated successfully');
+              return result;
+            }).catch(error => {
+              console.error('WebAssembly instantiation failed:', error);
+              throw error;
+            });
+          };
+          
+          if (WebAssembly.instantiateStreaming) {
+            const originalInstantiateStreaming = WebAssembly.instantiateStreaming;
+            WebAssembly.instantiateStreaming = function(...args) {
+              console.log('WebAssembly.instantiateStreaming called with:', args[0]);
+              return originalInstantiateStreaming.apply(this, args).then(result => {
+                console.log('WebAssembly streaming instantiation successful');
+                return result;
+              }).catch(error => {
+                console.error('WebAssembly streaming instantiation failed:', error);
+                throw error;
+              });
+            };
+          }
+        } else {
+          console.error('WebAssembly is not supported');
+        }
+        
+        // 检查SharedArrayBuffer支持
+        if (typeof SharedArrayBuffer !== 'undefined') {
+          console.log('SharedArrayBuffer is supported');
+        } else {
+          console.warn('SharedArrayBuffer is not supported - some features may not work');
+        }
+        
+        // 检查跨域隔离状态
+        console.log('crossOriginIsolated:', window.crossOriginIsolated);
+        
+        // 监控fetch请求（特别是WASM文件）
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+          const url = args[0];
+          if (typeof url === 'string' && (url.includes('.wasm') || url.includes('wasm'))) {
+            console.log('Fetching WASM file:', url);
+          }
+          return originalFetch.apply(this, args).then(response => {
+            if (typeof url === 'string' && (url.includes('.wasm') || url.includes('wasm'))) {
+              console.log('WASM fetch response:', response.status, response.statusText);
+            }
+            return response;
+          }).catch(error => {
+            if (typeof url === 'string' && (url.includes('.wasm') || url.includes('wasm'))) {
+              console.error('WASM fetch failed:', url, error);
+            }
+            throw error;
+          });
+        };
+       
+       // 确保音频元素可用于WebRTC
+        window.ensureAudioElement = function() {
+          if (!window.remoteAudio) {
+            window.remoteAudio = document.createElement('audio');
+            window.remoteAudio.autoplay = true;
+            window.remoteAudio.controls = false;
+            window.remoteAudio.style.display = 'none';
+            
+            // 确保DOM准备好后再添加到body
+            if (document.body) {
+              document.body.appendChild(window.remoteAudio);
+              console.log('Remote audio element created and added to body');
+            } else {
+              // 如果DOM还没准备好，等待DOMContentLoaded事件
+              document.addEventListener('DOMContentLoaded', function() {
+                if (document.body && window.remoteAudio && !window.remoteAudio.parentNode) {
+                  document.body.appendChild(window.remoteAudio);
+                  console.log('Remote audio element added to body after DOM ready');
+                }
+              });
+              console.log('Remote audio element created, waiting for DOM ready');
+            }
+          }
+          return window.remoteAudio;
+        };
+        
+        // 重写RTCPeerConnection的ontrack处理
+        if (window.RTCPeerConnection) {
+          const originalRTCPeerConnection = window.RTCPeerConnection;
+          window.RTCPeerConnection = function(...args) {
+            try {
+              const pc = new originalRTCPeerConnection(...args);
+              
+              // 保存原始的ontrack处理函数
+              const originalOntrack = pc.ontrack;
+              
+              // 添加track事件监听器
+              pc.addEventListener('track', function(event) {
+                try {
+                  console.log('Track received:', event.track.kind);
+                  
+                  // 处理音频轨道
+                  if (event.track && event.track.kind === 'audio') {
+                    // 确保音频元素存在
+                    const audioElement = window.ensureAudioElement();
+                    
+                    // 尝试连接音频流
+                    if (event.streams && event.streams.length > 0) {
+                      try {
+                        audioElement.srcObject = event.streams[0];
+                        console.log('Audio stream attached to element');
+                        
+                        // 确保音频播放
+                        audioElement.play().then(() => {
+                          console.log('Audio playback started successfully');
+                        }).catch(err => {
+                          console.warn('Audio playback failed to start:', err);
+                          // 尝试自动播放失败时的备用方案
+                          document.addEventListener('click', function audioClickHandler() {
+                            audioElement.play();
+                            document.removeEventListener('click', audioClickHandler);
+                            console.log('Audio playback started after user interaction');
+                          }, { once: true });
+                        });
+                      } catch (streamErr) {
+                        console.error('Error attaching audio stream:', streamErr);
+                        // 创建备用音频元素
+                        const backupAudio = document.createElement('audio');
+                        backupAudio.autoplay = true;
+                        backupAudio.srcObject = event.streams[0];
+                        console.log('Created backup audio element as fallback');
+                      }
+                    } else {
+                      console.warn('Audio track received but no streams available');
+                    }
+                  }
+                } catch (trackErr) {
+                  console.error('Error in track event handler:', trackErr);
+                }
+              });
+              
+              return pc;
+            } catch (pcErr) {
+              console.error('Error creating RTCPeerConnection:', pcErr);
+              // 出错时回退到原始构造函数
+              return new originalRTCPeerConnection(...args);
+            }
+          };
+          
+          // 复制原始构造函数的属性
+          Object.setPrototypeOf(window.RTCPeerConnection.prototype, originalRTCPeerConnection.prototype);
+          Object.setPrototypeOf(window.RTCPeerConnection, originalRTCPeerConnection);
+          console.log('RTCPeerConnection successfully enhanced for audio handling');
+        }
+        
+        console.log('Media APIs, WebAssembly and WebRTC audio initialized');
+     `);
   });
 
   // 页面导航时设置标题
@@ -364,6 +739,78 @@ function createTray() {
 
 // 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
 app.whenReady().then(() => {
+  // 设置权限处理，允许所有媒体访问请求
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    console.log('Permission requested:', permission);
+    // 允许所有权限请求，包括麦克风、摄像头、通知等
+    callback(true);
+  });
+  
+  // 设置权限检查处理器
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    console.log('Permission check:', permission, 'from:', requestingOrigin);
+    // 允许所有权限检查
+    return true;
+  });
+  
+  // 设置设备权限处理器
+  session.defaultSession.setDevicePermissionHandler((details) => {
+    console.log('Device permission requested:', details);
+    return true;
+  });
+  
+  // 处理证书错误
+  session.defaultSession.setCertificateVerifyProc((request, callback) => {
+    callback(0); // 忽略所有证书错误
+  });
+  
+  // 禁用网络安全策略并添加跨域隔离支持
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = {
+      ...details.responseHeaders,
+      'Access-Control-Allow-Origin': ['*'],
+      'Access-Control-Allow-Methods': ['GET, POST, PUT, DELETE, OPTIONS'],
+      'Access-Control-Allow-Headers': ['*']
+    };
+    
+    // 完全移除CSP以避免限制
+    delete responseHeaders['Content-Security-Policy'];
+    delete responseHeaders['content-security-policy'];
+    
+    // 对于WASM文件，使用更宽松的跨域策略
+    if (details.url.includes('.wasm') || details.url.includes('wasm')) {
+      responseHeaders['Cross-Origin-Embedder-Policy'] = ['credentialless'];
+      responseHeaders['Cross-Origin-Opener-Policy'] = ['unsafe-none'];
+      responseHeaders['Cross-Origin-Resource-Policy'] = ['cross-origin'];
+    } else {
+      // 对于其他资源，保持原有的跨域隔离设置
+      responseHeaders['Cross-Origin-Embedder-Policy'] = ['require-corp'];
+      responseHeaders['Cross-Origin-Opener-Policy'] = ['same-origin'];
+      responseHeaders['Cross-Origin-Resource-Policy'] = ['cross-origin'];
+    }
+    
+    callback({ responseHeaders });
+  });
+  
+  // 添加请求头以支持SharedArrayBuffer和WASM
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    // 对于WASM文件请求，使用更宽松的策略
+    if (details.url.includes('.wasm') || details.url.includes('wasm')) {
+      details.requestHeaders['Cross-Origin-Embedder-Policy'] = 'credentialless';
+      details.requestHeaders['Cross-Origin-Opener-Policy'] = 'unsafe-none';
+    } else {
+      details.requestHeaders['Cross-Origin-Embedder-Policy'] = 'require-corp';
+      details.requestHeaders['Cross-Origin-Opener-Policy'] = 'same-origin';
+    }
+    
+    // 添加通用的CORS头
+    details.requestHeaders['Access-Control-Allow-Origin'] = '*';
+    details.requestHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
+    details.requestHeaders['Access-Control-Allow-Headers'] = '*';
+    
+    callback({ requestHeaders: details.requestHeaders });
+  });
+  
   createWindow();
   createTray();
   

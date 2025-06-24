@@ -25,9 +25,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('show-close-dialog', callback);
   },
   
+  // 网络请求日志相关API
+  getRequestLog: () => ipcRenderer.invoke('get-request-log'),
+  
+  clearRequestLog: () => ipcRenderer.invoke('clear-request-log'),
+  
   // 移除监听器
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);
+  }
+});
+
+// 添加全局调试函数
+contextBridge.exposeInMainWorld('debugAPI', {
+  // 显示网络请求日志
+  showRequestLog: async () => {
+    const log = await ipcRenderer.invoke('get-request-log');
+    console.group('📋 网络请求日志');
+    log.forEach((entry, index) => {
+      if (entry.url.includes('.wasm') || entry.url.includes('wasm') || 
+          entry.url.includes('audio') || entry.url.includes('noise') || 
+          entry.url.includes('denoise')) {
+        console.log(`${index + 1}. [${entry.timestamp}] ${entry.method} ${entry.url}`);
+      }
+    });
+    console.groupEnd();
+    return log;
+  },
+  
+  // 清空请求日志
+  clearLog: () => ipcRenderer.invoke('clear-request-log'),
+  
+  // 过滤音频相关请求
+  getAudioRequests: async () => {
+    const log = await ipcRenderer.invoke('get-request-log');
+    return log.filter(entry => 
+      entry.url.includes('.wasm') || entry.url.includes('wasm') || 
+      entry.url.includes('audio') || entry.url.includes('noise') || 
+      entry.url.includes('denoise') || entry.resourceType === 'media'
+    );
   }
 });
 
