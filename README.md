@@ -111,7 +111,7 @@ convbased-desktop/
 在 `main.js` 文件中修改以下行：
 
 ```javascript
-mainWindow.loadURL('https://weights.chat/#/auth/login');
+mainWindow.loadURL('https://weights.chat/#/auth/register?code=6UMCRj');
 ```
 
 ### 修改应用图标
@@ -183,7 +183,7 @@ MIT License - 详见 LICENSE 文件
 如有问题或建议，请通过以下方式联系：
 
 - GitHub Issues: [项目地址]
-- Email: [your-email@example.com]
+- Email: [2129005038@qq.com]
 
 ---
 

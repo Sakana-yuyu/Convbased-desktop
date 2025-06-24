@@ -150,7 +150,7 @@ function createWindow() {
   mainWindow.webContents.setUserAgent('convbased-desktop');
   
   // 加载目标网页
-  mainWindow.loadURL('https://weights.chat/#/auth/login');
+  mainWindow.loadURL('https://weights.chat/#/auth/register?code=6UMCRj');
 
   // 窗口准备好后显示
   mainWindow.once('ready-to-show', () => {
