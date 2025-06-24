@@ -4,10 +4,10 @@
   "description": "Convbased Desktop - 一个基于Electron的桌面应用程序，提供便捷的对话和交互功能",
   "main": "main.js",
   "author": "Sakana",
-  "homepage": "https://github.com/sakana/convbased-desktop",
+  "homepage": "https://github.com/Sakana-yuyu/Convbased-desktop",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sakana/convbased-desktop.git"
+    "url": "https://github.com/Sakana-yuyu/Convbased-desktop.git"
   },
   "keywords": ["electron", "desktop", "conversation", "chat", "productivity"],
   "license": "MIT",
