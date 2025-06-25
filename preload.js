@@ -1,22 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 向渲染进程暴露安全的API
+// Expose secure APIs to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-  // 获取应用版本
+  // Get application version
   getVersion: () => ipcRenderer.invoke('app-version'),
   
-  // 显示窗口
+  // Show window
   showWindow: () => ipcRenderer.invoke('show-window'),
   
-  // 隐藏窗口
+  // Hide window
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   
-  // 监听窗口事件
+  // Listen to window events
   onWindowEvent: (callback) => {
     ipcRenderer.on('window-event', callback);
   },
   
-  // 关闭对话框相关API
+  // Close dialog related APIs
   sendCloseDialogResult: (result) => {
     ipcRenderer.send('close-dialog-result', result);
   },
@@ -25,23 +25,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('show-close-dialog', callback);
   },
   
-  // 网络请求日志相关API
+  // Network request log related APIs
   getRequestLog: () => ipcRenderer.invoke('get-request-log'),
   
   clearRequestLog: () => ipcRenderer.invoke('clear-request-log'),
   
-  // 移除监听器
+  // Remove listeners
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);
   }
 });
 
-// 添加全局调试函数
+// Add global debug functions
 contextBridge.exposeInMainWorld('debugAPI', {
-  // 显示网络请求日志
+  // Show network request log
   showRequestLog: async () => {
     const log = await ipcRenderer.invoke('get-request-log');
-    console.group('📋 网络请求日志');
+    console.group('📋 Network Request Log');
     log.forEach((entry, index) => {
       if (entry.url.includes('.wasm') || entry.url.includes('wasm') || 
           entry.url.includes('audio') || entry.url.includes('noise') || 
@@ -53,10 +53,10 @@ contextBridge.exposeInMainWorld('debugAPI', {
     return log;
   },
   
-  // 清空请求日志
+  // Clear request log
   clearLog: () => ipcRenderer.invoke('clear-request-log'),
   
-  // 过滤音频相关请求
+  // Filter audio-related requests
   getAudioRequests: async () => {
     const log = await ipcRenderer.invoke('get-request-log');
     return log.filter(entry => 
@@ -67,26 +67,51 @@ contextBridge.exposeInMainWorld('debugAPI', {
   }
 });
 
-// 在页面加载完成后执行一些初始化操作
+// Add error handlers for renderer process
+window.addEventListener('error', (event) => {
+  console.error('Window Error:', event.error);
+  event.preventDefault();
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled Promise Rejection:', event.reason);
+  event.preventDefault();
+});
+
+// Execute some initialization operations after page loading
 window.addEventListener('DOMContentLoaded', () => {
-  // 可以在这里添加一些页面增强功能
+  // Can add some page enhancement features here
   console.log('Convbased Desktop App loaded');
   
-  // 添加一些快捷键支持
+  // Add additional error handling for scripts
+  const originalConsoleError = console.error;
+  console.error = function(...args) {
+    // Filter out common Electron warnings that are not critical
+    const message = args.join(' ');
+    if (message.includes('Script failed to execute') || 
+        message.includes('UnhandledPromiseRejectionWarning')) {
+      // Log but don't throw for these specific errors
+      originalConsoleError.apply(console, ['[Filtered Error]:', ...args]);
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
+  
+  // Add some keyboard shortcut support
   document.addEventListener('keydown', (event) => {
-    // Ctrl+R 或 F5 刷新页面
+    // Ctrl+R or F5 to refresh page
     if ((event.ctrlKey && event.key === 'r') || event.key === 'F5') {
       event.preventDefault();
       window.location.reload();
     }
     
-    // Ctrl+Shift+I 打开开发者工具（在主进程中处理）
+    // Ctrl+Shift+I to open developer tools (handled in main process)
     if (event.ctrlKey && event.shiftKey && event.key === 'I') {
       event.preventDefault();
-      // 这个快捷键由主进程处理
+      // This shortcut is handled by main process
     }
     
-    // Esc 键最小化到托盘
+    // Esc key to minimize to tray
     if (event.key === 'Escape') {
       event.preventDefault();
       window.electronAPI.hideWindow();

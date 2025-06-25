@@ -21,12 +21,12 @@ function readSettings() {
       // 如果设置文件不存在，创建默认设置文件
       const defaultSettings = {};
       saveSettings(defaultSettings);
-      console.log('已创建默认设置文件:', settingsPath);
+      console.log('Created default settings file:', settingsPath);
       return defaultSettings;
     }
   } catch (error) {
-    console.error('读取设置文件失败:', error);
-    // 如果读取失败，也尝试创建默认设置文件
+    console.error('Failed to read settings file:', error);
+    // If reading fails, try to create default settings file
     const defaultSettings = {};
     saveSettings(defaultSettings);
     return defaultSettings;
@@ -38,7 +38,7 @@ function saveSettings(settings) {
   try {
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
   } catch (error) {
-    console.error('保存设置文件失败:', error);
+    console.error('Failed to save settings file:', error);
   }
 }
 
@@ -61,14 +61,14 @@ function logRequest(details) {
   };
   requestLog.push(logEntry);
   
-  // 特别关注WASM和音频相关请求
+  // Monitor WASM and audio related requests
   if (details.url.includes('.wasm') || 
       details.url.includes('wasm') || 
       details.url.includes('audio') || 
       details.url.includes('noise') || 
       details.url.includes('denoise') ||
       details.resourceType === 'media') {
-    console.log('🔍 重要请求:', logEntry);
+    console.log('🔍 Important Request:', logEntry);
   }
   
   // 保持日志大小在合理范围内
@@ -86,35 +86,48 @@ function logResponse(details) {
     responseHeaders: details.responseHeaders
   };
   
-  // 特别关注WASM和音频相关响应
+  // Monitor WASM and audio related responses
   if (details.url.includes('.wasm') || 
       details.url.includes('wasm') || 
       details.url.includes('audio') || 
       details.url.includes('noise') || 
       details.url.includes('denoise')) {
-    console.log('📥 重要响应:', responseEntry);
+    console.log('📥 Important Response:', responseEntry);
     
-    // 检查是否有错误状态码
+    // Check for error status codes
     if (details.statusCode >= 400) {
-      console.error('❌ 请求失败:', details.url, '状态码:', details.statusCode);
+      console.error('❌ Request Failed:', details.url, 'Status Code:', details.statusCode);
     }
   }
 }
+// Security and performance switches
 app.commandLine.appendSwitch('disable-web-security');
 app.commandLine.appendSwitch('allow-running-insecure-content');
 app.commandLine.appendSwitch('disable-site-isolation-trials');
+app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor');
 app.commandLine.appendSwitch('enable-wasm-threads');
 app.commandLine.appendSwitch('enable-wasm-simd');
 app.commandLine.appendSwitch('js-flags', '--experimental-wasm-threads --experimental-wasm-simd');
 
-// 确保只有一个应用实例运行
+// Allow Cloudflare and external resources
+app.commandLine.appendSwitch('disable-web-security');
+app.commandLine.appendSwitch('allow-running-insecure-content');
+app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests');
+app.commandLine.appendSwitch('ignore-certificate-errors');
+app.commandLine.appendSwitch('ignore-ssl-errors');
+app.commandLine.appendSwitch('ignore-certificate-errors-spki-list');
+app.commandLine.appendSwitch('disable-extensions-except');
+app.commandLine.appendSwitch('disable-extensions');
+app.commandLine.appendSwitch('allow-file-access-from-files');
+
+// Ensure only one application instance is running
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    // 当运行第二个实例时，将焦点放在主窗口上
+    // When running a second instance, focus on the main window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -202,7 +215,7 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: false,
+      contextIsolation: true,
       enableRemoteModule: false,
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
@@ -212,49 +225,154 @@ function createWindow() {
       enableBlinkFeatures: 'MediaStreamTrack,MediaRecorder,AudioWorklet,WebAssembly,SharedArrayBuffer,AudioWorkletGlobalScope',
       additionalArguments: [
         '--enable-features=VaapiVideoDecoder,WebAssembly,WebAssemblyStreaming,WebAssemblyThreads',
-        '--disable-features=VizDisplayCompositor,OutOfBlinkCors',
+        '--disable-features=VizDisplayCompositor,OutOfBlinkCors,BlockInsecurePrivateNetworkRequests',
         '--enable-wasm-threads',
         '--enable-wasm-simd',
         '--js-flags=--experimental-wasm-threads --experimental-wasm-simd',
         '--enable-unsafe-webgpu',
         '--disable-web-security',
         '--disable-site-isolation-trials',
-        '--allow-running-insecure-content'
+        '--allow-running-insecure-content',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors',
+        '--ignore-certificate-errors-spki-list',
+        '--disable-extensions',
+        '--allow-file-access-from-files',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
       ]
     },
     show: false, // 初始不显示，等加载完成后显示
     titleBarStyle: 'default'
   });
 
-  // 设置User-Agent - 动态获取系统默认User-Agent
+  // 设置User-Agent - 完全动态获取系统信息
   const os = require('os');
+  const { app } = require('electron');
   const platform = os.platform();
   const arch = os.arch();
   const release = os.release();
   
-  // 根据系统平台生成合适的User-Agent
-let userAgent;
-if (platform === 'win32') {
-  const windowsVersion = release.startsWith('10.') ? '10.0' : '6.1';
-  userAgent = `Mozilla/5.0 (Windows NT ${windowsVersion}; ${arch === 'x64' ? 'Win64; x64' : 'Win32'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
-} else if (platform === 'darwin') {
-  userAgent = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
-} else if (platform === 'linux') {
-  userAgent = `Mozilla/5.0 (X11; Linux ${arch === 'x64' ? 'x86_64' : 'i686'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
-} else {
-  // 默认使用通用User-Agent
-  userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Convbased_desktop`;
-}
+  // 获取Electron和Chrome版本信息
+  const electronVersion = process.versions.electron;
+  const chromeVersion = process.versions.chrome;
+  const nodeVersion = process.versions.node;
+  
+  // 动态生成WebKit版本（基于Chrome版本）
+  const webkitVersion = chromeVersion ? `537.36` : '537.36';
+  
+  // 根据系统平台动态生成User-Agent
+  let userAgent;
+  if (platform === 'win32') {
+    // 动态解析Windows版本
+    const versionParts = release.split('.');
+    const majorVersion = parseInt(versionParts[0]);
+    const minorVersion = parseInt(versionParts[1]) || 0;
+    
+    let windowsVersion;
+    if (majorVersion >= 10) {
+      windowsVersion = '10.0';
+    } else if (majorVersion === 6) {
+      if (minorVersion >= 2) {
+        windowsVersion = '6.2'; // Windows 8/8.1
+      } else if (minorVersion === 1) {
+        windowsVersion = '6.1'; // Windows 7
+      } else {
+        windowsVersion = '6.0'; // Windows Vista
+      }
+    } else {
+      windowsVersion = '10.0'; // 默认为Windows 10
+    }
+    
+    const archString = arch === 'x64' ? 'Win64; x64' : arch === 'arm64' ? 'ARM64' : 'Win32';
+    userAgent = `Mozilla/5.0 (Windows NT ${windowsVersion}; ${archString}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else if (platform === 'darwin') {
+    // 动态获取macOS版本
+    const macVersion = release.split('.').map(v => parseInt(v));
+    const macMajor = macVersion[0] || 20;
+    const macMinor = macVersion[1] || 0;
+    
+    // macOS版本映射（Darwin版本到macOS版本）
+    let osxVersion;
+    if (macMajor >= 23) {
+      osxVersion = '14_0_0'; // macOS Sonoma 14.x
+    } else if (macMajor >= 22) {
+      osxVersion = '13_0_0'; // macOS Ventura 13.x
+    } else if (macMajor >= 21) {
+      osxVersion = '12_0_0'; // macOS Monterey 12.x
+    } else if (macMajor >= 20) {
+      osxVersion = '11_0_0'; // macOS Big Sur 11.x
+    } else if (macMajor >= 19) {
+      osxVersion = '10_15_7'; // macOS Catalina 10.15
+    } else {
+      osxVersion = '10_15_7'; // 默认版本
+    }
+    
+    const macArch = arch === 'arm64' ? 'ARM64' : 'Intel';
+    userAgent = `Mozilla/5.0 (Macintosh; ${macArch} Mac OS X ${osxVersion}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else if (platform === 'linux') {
+    // 动态获取Linux架构
+    const linuxArch = arch === 'x64' ? 'x86_64' : arch === 'arm64' ? 'aarch64' : arch === 'arm' ? 'armv7l' : 'i686';
+    userAgent = `Mozilla/5.0 (X11; Linux ${linuxArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else {
+    // 其他平台使用通用User-Agent
+    userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+  }
   
   mainWindow.webContents.setUserAgent(userAgent);
-  console.log('设置User-Agent:', userAgent);
   
-  // 设置网络请求监听器
+  // Output detailed system information and User-Agent
+  console.log('=== Dynamic User-Agent Generation Info ===');
+  console.log('Platform:', platform);
+  console.log('Architecture:', arch);
+  console.log('OS Release:', release);
+  console.log('Electron Version:', electronVersion);
+  console.log('Chrome Version:', chromeVersion);
+  console.log('Node.js Version:', nodeVersion);
+  console.log('WebKit Version:', webkitVersion);
+  console.log('Final User-Agent:', userAgent);
+  console.log('==========================================');
+  
+  // Configure session and network request listeners
   const { session } = require('electron');
   
-  // 监听所有网络请求
+  // Configure session permissions for Cloudflare and external resources
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    // Allow all permissions for better compatibility
+    callback(true);
+  });
+  
+  // Set CSP to allow Cloudflare resources
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = details.responseHeaders || {};
+    
+    // Remove restrictive CSP headers
+    delete responseHeaders['content-security-policy'];
+    delete responseHeaders['Content-Security-Policy'];
+    delete responseHeaders['x-frame-options'];
+    delete responseHeaders['X-Frame-Options'];
+    
+    // Add permissive headers for Cloudflare resources
+    responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+    responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+    responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+    
+    callback({ responseHeaders });
+  });
+  
+  // Monitor all network requests
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     logRequest(details);
+    
+    // Special handling for Cloudflare Turnstile API
+    if (details.url.includes('challenges.cloudflare.com')) {
+      console.log(' Cloudflare Turnstile Request:', details.url);
+    }
+    
     callback({});
   });
   
@@ -263,9 +381,9 @@ if (platform === 'win32') {
     logResponse(details);
   });
   
-  // 监听请求失败
+  // Monitor request failures
   session.defaultSession.webRequest.onErrorOccurred((details) => {
-    console.error('🚨 网络请求失败:', {
+    console.error('Network Request Failed:', {
       url: details.url,
       error: details.error,
       timestamp: new Date().toISOString()
@@ -280,7 +398,7 @@ if (platform === 'win32') {
   
   ipcMain.handle('clear-request-log', () => {
     requestLog = [];
-    console.log('📋 请求日志已清空');
+    console.log('📋 Request log cleared');
     return true;
   });
   
@@ -360,12 +478,12 @@ if (platform === 'win32') {
          }
          return originalFetch.apply(this, args).then(response => {
            if (typeof url === 'string' && (url.includes('noise') || url.includes('denoise') || url.includes('audio') || url.includes('.wasm'))) {
-             console.log('📥 音频相关响应:', url, 'Status:', response.status);
+             console.log('📥 Audio-related response:', url, 'Status:', response.status);
            }
            return response;
          }).catch(error => {
            if (typeof url === 'string' && (url.includes('noise') || url.includes('denoise') || url.includes('audio') || url.includes('.wasm'))) {
-             console.error('❌ 音频相关请求失败:', url, error);
+             console.error('❌ Audio-related request failed:', url, error);
            }
            throw error;
          });
@@ -605,18 +723,45 @@ if (platform === 'win32') {
     }
   });
 
-  // 处理外部链接
+  // Add webContents error handling
+  mainWindow.webContents.on('crashed', (event, killed) => {
+    console.error('WebContents crashed:', { killed });
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('WebContents became unresponsive');
+  });
+
+  mainWindow.webContents.on('responsive', () => {
+    console.log('WebContents became responsive again');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.error('Failed to load:', { errorCode, errorDescription, validatedURL, isMainFrame });
+  });
+
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    // Filter out common Electron warnings
+    if (message.includes('Script failed to execute') || 
+        message.includes('UnhandledPromiseRejectionWarning')) {
+      console.log('[Filtered Console Message]:', message);
+      return;
+    }
+    console.log(`Console [${level}]:`, message);
+  });
+
+  // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // 阻止导航到外部链接
+  // Prevent navigation to external links
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);
     const currentUrl = new URL(mainWindow.webContents.getURL());
     
-    // 允许在同一域名内导航
+    // Allow navigation within the same domain
     if (parsedUrl.origin !== currentUrl.origin) {
       event.preventDefault();
       shell.openExternal(navigationUrl);
@@ -737,19 +882,38 @@ function createTray() {
   });
 }
 
-// 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
+// Add global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle renderer process crashes
+app.on('render-process-gone', (event, webContents, details) => {
+  console.error('Renderer process gone:', details);
+});
+
+// Handle child process crashes
+app.on('child-process-gone', (event, details) => {
+  console.error('Child process gone:', details);
+});
+
+// Called when Electron has finished initialization and is ready to create browser windows
 app.whenReady().then(() => {
-  // 设置权限处理，允许所有媒体访问请求
+  // Set permission handler to allow all media access requests
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     console.log('Permission requested:', permission);
-    // 允许所有权限请求，包括麦克风、摄像头、通知等
+    // Allow all permission requests including microphone, camera, notifications, etc.
     callback(true);
   });
   
-  // 设置权限检查处理器
+  // Set permission check handler
   session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     console.log('Permission check:', permission, 'from:', requestingOrigin);
-    // 允许所有权限检查
+    // Allow all permission checks
     return true;
   });
   
@@ -759,12 +923,12 @@ app.whenReady().then(() => {
     return true;
   });
   
-  // 处理证书错误
+  // Handle certificate errors
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
-    callback(0); // 忽略所有证书错误
+    callback(0); // Ignore all certificate errors
   });
   
-  // 禁用网络安全策略并添加跨域隔离支持
+  // Disable network security policies and add cross-origin isolation support
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = {
       ...details.responseHeaders,
@@ -773,11 +937,11 @@ app.whenReady().then(() => {
       'Access-Control-Allow-Headers': ['*']
     };
     
-    // 完全移除CSP以避免限制
+    // Completely remove CSP to avoid restrictions
     delete responseHeaders['Content-Security-Policy'];
     delete responseHeaders['content-security-policy'];
     
-    // 对于WASM文件，使用更宽松的跨域策略
+    // For WASM files, use more relaxed cross-origin policy
     if (details.url.includes('.wasm') || details.url.includes('wasm')) {
       responseHeaders['Cross-Origin-Embedder-Policy'] = ['credentialless'];
       responseHeaders['Cross-Origin-Opener-Policy'] = ['unsafe-none'];
@@ -792,9 +956,9 @@ app.whenReady().then(() => {
     callback({ responseHeaders });
   });
   
-  // 添加请求头以支持SharedArrayBuffer和WASM
+  // Add request headers to support SharedArrayBuffer and WASM
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    // 对于WASM文件请求，使用更宽松的策略
+    // For WASM file requests, use more relaxed policy
     if (details.url.includes('.wasm') || details.url.includes('wasm')) {
       details.requestHeaders['Cross-Origin-Embedder-Policy'] = 'credentialless';
       details.requestHeaders['Cross-Origin-Opener-Policy'] = 'unsafe-none';
@@ -803,7 +967,7 @@ app.whenReady().then(() => {
       details.requestHeaders['Cross-Origin-Opener-Policy'] = 'same-origin';
     }
     
-    // 添加通用的CORS头
+    // Add general CORS headers
     details.requestHeaders['Access-Control-Allow-Origin'] = '*';
     details.requestHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
     details.requestHeaders['Access-Control-Allow-Headers'] = '*';
@@ -815,8 +979,8 @@ app.whenReady().then(() => {
   createTray();
   
   app.on('activate', () => {
-    // 在 macOS 上，当点击 dock 图标并且没有其他窗口打开时，
-    // 通常在应用程序中重新创建一个窗口。
+    // On macOS, when clicking the dock icon and no other windows are open,
+    // it's common to re-create a window in the app.
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     } else {
@@ -825,26 +989,26 @@ app.whenReady().then(() => {
   });
 });
 
-// 当所有窗口都被关闭时退出应用
+// Exit app when all windows are closed
 app.on('window-all-closed', () => {
-  // 在 macOS 上，除非用户用 Cmd + Q 确定地退出，
-  // 否则绝大部分应用及其菜单栏会保持激活。
+  // On macOS, unless the user explicitly quits with Cmd + Q,
+  // most apps and their menu bar remain active.
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// 在应用退出前清理
+// Clean up before app exit
 app.on('before-quit', () => {
   isQuiting = true;
 });
 
-// 处理关闭动作
+// Handle close action
 function handleCloseAction(action) {
   if (action === 'minimize') {
     mainWindow.hide();
     
-    // 首次最小化到托盘时显示提示
+    // Show notification when first minimized to tray
     if (!mainWindow.isVisible()) {
       tray.displayBalloon({
         iconType: 'info',
@@ -856,10 +1020,10 @@ function handleCloseAction(action) {
     isQuiting = true;
     app.quit();
   } else if (action === 'ask') {
-    // 显示关闭对话框让用户选择
+    // Show close dialog for user to choose
     pendingClose = true;
     createCloseDialog();
-    return; // 不设置pendingClose为false，等对话框处理完成
+    return; // Don't set pendingClose to false, wait for dialog completion
   }
   pendingClose = false;
 }

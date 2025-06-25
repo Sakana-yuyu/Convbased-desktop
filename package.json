@@ -1,6 +1,6 @@
 {
   "name": "convbased-desktop",
-  "version": "1.3.0",
+  "version": "1.3.3",
   "description": "Convbased studio 的桌面应用端",
   "main": "main.js",
   "author": "Sakana",
@@ -19,14 +19,14 @@
     "dev": "electron . --dev"
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
+    "electron-store": "^10.1.0",
     "vue": "^3.3.0",
     "@vitejs/plugin-vue": "^4.4.0",
     "vite": "^4.5.0"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "electron": "^37.0.0",
+    "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.convbased.desktop",
