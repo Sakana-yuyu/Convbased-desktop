@@ -30,7 +30,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
         
     - name: Install dependencies
@@ -42,6 +42,13 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         release: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
         build_script_name: build
+        skip_build: false
+        use_vue_cli: false
+      env:
+        # 禁用 macOS 代码签名
+        CSC_IDENTITY_AUTO_DISCOVERY: false
+        # 设置构建环境
+        CI: true
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
