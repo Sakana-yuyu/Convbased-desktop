@@ -41,8 +41,7 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         release: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-        build_script_name: build
-        skip_build: false
+        skip_build: true
         use_vue_cli: false
       env:
         # 禁用 macOS 代码签名
