@@ -22,8 +22,6 @@ jobs:
             platform: win32
           - os: macos-latest
             platform: darwin
-          - os: ubuntu-latest
-            platform: linux
         
     steps:
     - name: Checkout code
