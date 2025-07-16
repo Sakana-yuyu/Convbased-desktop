@@ -253,89 +253,298 @@ function createWindow() {
   const platform = os.platform();
   const arch = os.arch();
   const release = os.release();
+  const cpus = os.cpus();
+  const totalmem = os.totalmem();
   
   // 获取Electron和Chrome版本信息
   const electronVersion = process.versions.electron;
   const chromeVersion = process.versions.chrome;
   const nodeVersion = process.versions.node;
+  const v8Version = process.versions.v8;
   
-  // 动态生成WebKit版本（基于Chrome版本）
-  const webkitVersion = chromeVersion ? `537.36` : '537.36';
+  // 动态生成WebKit版本（基于Chrome版本的前两位数字）
+  let webkitVersion = '537.36';
+  if (chromeVersion) {
+    const chromeMajor = parseInt(chromeVersion.split('.')[0]);
+    // WebKit版本通常与Chrome版本相关
+    if (chromeMajor >= 120) {
+      webkitVersion = '537.36';
+    } else if (chromeMajor >= 110) {
+      webkitVersion = '537.36';
+    } else if (chromeMajor >= 100) {
+      webkitVersion = '537.36';
+    } else {
+      webkitVersion = '537.36';
+    }
+  }
+  
+  // 辅助函数：获取详细的系统信息
+  function getDetailedSystemInfo() {
+    const systemInfo = {
+      platform,
+      arch,
+      release,
+      cpuModel: cpus.length > 0 ? cpus[0].model : 'Unknown',
+      cpuCount: cpus.length,
+      totalMemoryGB: Math.round(totalmem / (1024 * 1024 * 1024)),
+      nodeVersion,
+      v8Version,
+      electronVersion,
+      chromeVersion
+    };
+    
+    // 尝试获取更详细的系统信息
+    try {
+      if (platform === 'win32') {
+        systemInfo.hostname = os.hostname();
+        systemInfo.userInfo = os.userInfo();
+      } else if (platform === 'darwin') {
+        systemInfo.hostname = os.hostname();
+      } else if (platform === 'linux') {
+        systemInfo.hostname = os.hostname();
+        // 尝试读取发行版信息
+        try {
+          const fs = require('fs');
+          if (fs.existsSync('/etc/os-release')) {
+            const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+            const distroMatch = osRelease.match(/PRETTY_NAME="([^"]+)"/i);
+            if (distroMatch) {
+              systemInfo.linuxDistro = distroMatch[1];
+            }
+          }
+        } catch (e) {
+          // 忽略读取错误
+        }
+      }
+    } catch (e) {
+      // 忽略获取详细信息时的错误
+    }
+    
+    return systemInfo;
+  }
+  
+  const systemInfo = getDetailedSystemInfo();
   
   // 根据系统平台动态生成User-Agent
   let userAgent;
   if (platform === 'win32') {
-    // 动态解析Windows版本
+    // 动态解析Windows版本 - 支持更多版本
     const versionParts = release.split('.');
     const majorVersion = parseInt(versionParts[0]);
     const minorVersion = parseInt(versionParts[1]) || 0;
+    const buildVersion = parseInt(versionParts[2]) || 0;
     
     let windowsVersion;
+    let windowsName = 'Windows';
+    
+    // 更精确的Windows版本检测
     if (majorVersion >= 10) {
-      windowsVersion = '10.0';
-    } else if (majorVersion === 6) {
-      if (minorVersion >= 2) {
-        windowsVersion = '6.2'; // Windows 8/8.1
-      } else if (minorVersion === 1) {
-        windowsVersion = '6.1'; // Windows 7
+      if (buildVersion >= 22000) {
+        windowsVersion = '10.0';
+        windowsName = 'Windows 11';
       } else {
-        windowsVersion = '6.0'; // Windows Vista
+        windowsVersion = '10.0';
+        windowsName = 'Windows 10';
+      }
+    } else if (majorVersion === 6) {
+      if (minorVersion >= 3) {
+        windowsVersion = '6.3';
+        windowsName = 'Windows 8.1';
+      } else if (minorVersion >= 2) {
+        windowsVersion = '6.2';
+        windowsName = 'Windows 8';
+      } else if (minorVersion >= 1) {
+        windowsVersion = '6.1';
+        windowsName = 'Windows 7';
+      } else {
+        windowsVersion = '6.0';
+        windowsName = 'Windows Vista';
+      }
+    } else if (majorVersion === 5) {
+      if (minorVersion >= 2) {
+        windowsVersion = '5.2';
+        windowsName = 'Windows Server 2003';
+      } else if (minorVersion >= 1) {
+        windowsVersion = '5.1';
+        windowsName = 'Windows XP';
+      } else {
+        windowsVersion = '5.0';
+        windowsName = 'Windows 2000';
       }
     } else {
-      windowsVersion = '10.0'; // 默认为Windows 10
+      // 对于未知版本，使用实际的版本号
+      windowsVersion = `${majorVersion}.${minorVersion}`;
+      windowsName = `Windows ${majorVersion}.${minorVersion}`;
     }
     
-    const archString = arch === 'x64' ? 'Win64; x64' : arch === 'arm64' ? 'ARM64' : 'Win32';
+    // 更精确的架构检测
+    let archString;
+    if (arch === 'x64' || arch === 'x86_64') {
+      archString = 'Win64; x64';
+    } else if (arch === 'arm64') {
+      archString = 'ARM64';
+    } else if (arch === 'arm') {
+      archString = 'ARM';
+    } else if (arch === 'ia32' || arch === 'x86') {
+      archString = 'Win32';
+    } else {
+      archString = `${arch}`;
+    }
+    
     userAgent = `Mozilla/5.0 (Windows NT ${windowsVersion}; ${archString}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
     
   } else if (platform === 'darwin') {
-    // 动态获取macOS版本
+    // 更精确的macOS版本检测
     const macVersion = release.split('.').map(v => parseInt(v));
-    const macMajor = macVersion[0] || 20;
+    const macMajor = macVersion[0];
     const macMinor = macVersion[1] || 0;
+    const macPatch = macVersion[2] || 0;
     
-    // macOS版本映射（Darwin版本到macOS版本）
+    // Darwin版本到macOS版本的精确映射
     let osxVersion;
-    if (macMajor >= 23) {
-      osxVersion = '14_0_0'; // macOS Sonoma 14.x
+    let macOSName = 'macOS';
+    
+    if (macMajor >= 24) {
+      // macOS 15.x Sequoia (Darwin 24.x)
+      const macOSMajor = 15;
+      const macOSMinor = macMinor >= 0 ? macMinor : 0;
+      osxVersion = `${macOSMajor}_${macOSMinor}_${macPatch}`;
+      macOSName = 'macOS Sequoia';
+    } else if (macMajor >= 23) {
+      // macOS 14.x Sonoma (Darwin 23.x)
+      const macOSMajor = 14;
+      const macOSMinor = macMinor >= 0 ? macMinor : 0;
+      osxVersion = `${macOSMajor}_${macOSMinor}_${macPatch}`;
+      macOSName = 'macOS Sonoma';
     } else if (macMajor >= 22) {
-      osxVersion = '13_0_0'; // macOS Ventura 13.x
+      // macOS 13.x Ventura (Darwin 22.x)
+      const macOSMajor = 13;
+      const macOSMinor = macMinor >= 0 ? macMinor : 0;
+      osxVersion = `${macOSMajor}_${macOSMinor}_${macPatch}`;
+      macOSName = 'macOS Ventura';
     } else if (macMajor >= 21) {
-      osxVersion = '12_0_0'; // macOS Monterey 12.x
+      // macOS 12.x Monterey (Darwin 21.x)
+      const macOSMajor = 12;
+      const macOSMinor = macMinor >= 0 ? macMinor : 0;
+      osxVersion = `${macOSMajor}_${macOSMinor}_${macPatch}`;
+      macOSName = 'macOS Monterey';
     } else if (macMajor >= 20) {
-      osxVersion = '11_0_0'; // macOS Big Sur 11.x
+      // macOS 11.x Big Sur (Darwin 20.x)
+      const macOSMajor = 11;
+      const macOSMinor = macMinor >= 0 ? macMinor : 0;
+      osxVersion = `${macOSMajor}_${macOSMinor}_${macPatch}`;
+      macOSName = 'macOS Big Sur';
     } else if (macMajor >= 19) {
-      osxVersion = '10_15_7'; // macOS Catalina 10.15
+      // macOS 10.15.x Catalina (Darwin 19.x)
+      osxVersion = `10_15_${macPatch}`;
+      macOSName = 'macOS Catalina';
+    } else if (macMajor >= 18) {
+      // macOS 10.14.x Mojave (Darwin 18.x)
+      osxVersion = `10_14_${macPatch}`;
+      macOSName = 'macOS Mojave';
+    } else if (macMajor >= 17) {
+      // macOS 10.13.x High Sierra (Darwin 17.x)
+      osxVersion = `10_13_${macPatch}`;
+      macOSName = 'macOS High Sierra';
+    } else if (macMajor >= 16) {
+      // macOS 10.12.x Sierra (Darwin 16.x)
+      osxVersion = `10_12_${macPatch}`;
+      macOSName = 'macOS Sierra';
     } else {
-      osxVersion = '10_15_7'; // 默认版本
+      // 对于更老的版本，使用实际检测到的版本
+      const estimatedMajor = Math.max(10, 10 + (macMajor - 10));
+      const estimatedMinor = Math.max(0, macMajor - 10);
+      osxVersion = `${estimatedMajor}_${estimatedMinor}_${macPatch}`;
+      macOSName = `macOS ${estimatedMajor}.${estimatedMinor}`;
     }
     
-    const macArch = arch === 'arm64' ? 'ARM64' : 'Intel';
+    // 更精确的Mac架构检测
+    let macArch;
+    if (arch === 'arm64') {
+      macArch = 'ARM64';
+    } else if (arch === 'x64' || arch === 'x86_64') {
+      macArch = 'Intel';
+    } else {
+      macArch = arch.toUpperCase();
+    }
+    
     userAgent = `Mozilla/5.0 (Macintosh; ${macArch} Mac OS X ${osxVersion}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
     
   } else if (platform === 'linux') {
-    // 动态获取Linux架构
-    const linuxArch = arch === 'x64' ? 'x86_64' : arch === 'arm64' ? 'aarch64' : arch === 'arm' ? 'armv7l' : 'i686';
+    // 更精确的Linux架构和发行版检测
+    let linuxArch;
+    if (arch === 'x64' || arch === 'x86_64') {
+      linuxArch = 'x86_64';
+    } else if (arch === 'arm64' || arch === 'aarch64') {
+      linuxArch = 'aarch64';
+    } else if (arch === 'arm') {
+      linuxArch = 'armv7l';
+    } else if (arch === 'ia32' || arch === 'x86') {
+      linuxArch = 'i686';
+    } else if (arch === 'mips') {
+      linuxArch = 'mips';
+    } else if (arch === 'mipsel') {
+      linuxArch = 'mipsel';
+    } else if (arch === 'ppc64') {
+      linuxArch = 'ppc64';
+    } else if (arch === 's390x') {
+      linuxArch = 's390x';
+    } else {
+      linuxArch = arch;
+    }
+    
     userAgent = `Mozilla/5.0 (X11; Linux ${linuxArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
     
+  } else if (platform === 'freebsd') {
+    // FreeBSD支持
+    const freebsdArch = arch === 'x64' ? 'amd64' : arch === 'arm64' ? 'arm64' : arch;
+    userAgent = `Mozilla/5.0 (X11; FreeBSD ${freebsdArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else if (platform === 'openbsd') {
+    // OpenBSD支持
+    const openbsdArch = arch === 'x64' ? 'amd64' : arch;
+    userAgent = `Mozilla/5.0 (X11; OpenBSD ${openbsdArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else if (platform === 'netbsd') {
+    // NetBSD支持
+    const netbsdArch = arch === 'x64' ? 'amd64' : arch;
+    userAgent = `Mozilla/5.0 (X11; NetBSD ${netbsdArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
+  } else if (platform === 'sunos') {
+    // Solaris/SunOS支持
+    const solarisArch = arch === 'x64' ? 'x86_64' : arch;
+    userAgent = `Mozilla/5.0 (X11; SunOS ${solarisArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    
   } else {
-    // 其他平台使用通用User-Agent
-    userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
+    // 对于未知平台，使用检测到的实际信息构建User-Agent
+    const unknownArch = arch === 'x64' ? 'x86_64' : arch;
+    userAgent = `Mozilla/5.0 (${platform.charAt(0).toUpperCase() + platform.slice(1)}; ${unknownArch}) AppleWebKit/${webkitVersion} (KHTML, like Gecko) Chrome/${chromeVersion} Safari/${webkitVersion}`;
   }
   
   mainWindow.webContents.setUserAgent(userAgent);
   
   // Output detailed system information and User-Agent
-  console.log('=== Dynamic User-Agent Generation Info ===');
+  console.log('=== Enhanced Dynamic User-Agent Generation Info ===');
   console.log('Platform:', platform);
   console.log('Architecture:', arch);
   console.log('OS Release:', release);
+  console.log('CPU Model:', systemInfo.cpuModel);
+  console.log('CPU Count:', systemInfo.cpuCount);
+  console.log('Total Memory (GB):', systemInfo.totalMemoryGB);
+  if (systemInfo.hostname) {
+    console.log('Hostname:', systemInfo.hostname);
+  }
+  if (systemInfo.linuxDistro) {
+    console.log('Linux Distribution:', systemInfo.linuxDistro);
+  }
   console.log('Electron Version:', electronVersion);
   console.log('Chrome Version:', chromeVersion);
   console.log('Node.js Version:', nodeVersion);
+  console.log('V8 Version:', v8Version);
   console.log('WebKit Version:', webkitVersion);
   console.log('Final User-Agent:', userAgent);
-  console.log('==========================================');
+  console.log('User-Agent Length:', userAgent.length, 'characters');
+  console.log('====================================================');
   
   // Configure session and network request listeners
   const { session } = require('electron');
