@@ -1,6 +1,6 @@
 {
   "name": "convbased-desktop",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Convbased studio 的桌面应用端",
   "main": "main.js",
   "author": "Sakana",

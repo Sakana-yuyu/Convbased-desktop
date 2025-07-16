@@ -248,8 +248,6 @@ function createWindow() {
   });
 
   // 设置User-Agent - 精确识别Windows和macOS版本
-  const os = require('os');
-  const { app } = require('electron');
   const platform = os.platform();
   const arch = os.arch();
   const release = os.release();
@@ -259,21 +257,7 @@ function createWindow() {
   const chromeVersion = process.versions.chrome;
   const nodeVersion = process.versions.node;
   const v8Version = process.versions.v8;
-  
-  // 动态生成WebKit版本（基于Chrome版本）
-  const webkitVersion = chromeVersion ? '537.36' : '537.36';
-  
-  // 系统信息收集
-  const systemInfo = {
-    platform,
-    arch,
-    release,
-    electronVersion,
-    chromeVersion,
-    nodeVersion,
-    v8Version,
-    webkitVersion
-  };
+  const webkitVersion = '537.36';
   
   // 标准化User-Agent格式以确保降噪功能的WASM认证正常工作
   // 固定使用当前Electron的Chrome版本，确保在所有平台上格式一致
@@ -372,13 +356,6 @@ function createWindow() {
   });
   
   // Configure session and network request listeners
-  const { session } = require('electron');
-  
-  // Configure session permissions for Cloudflare and external resources
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    // Allow all permissions for better compatibility
-    callback(true);
-  });
   
   // Set CSP to allow Cloudflare resources
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -425,11 +402,10 @@ function createWindow() {
   });
   
   // 添加IPC处理器以便从渲染进程获取请求日志
-  const { ipcMain } = require('electron');
   ipcMain.handle('get-request-log', () => {
     return requestLog;
   });
-  
+
   ipcMain.handle('clear-request-log', () => {
     requestLog = [];
     console.log('📋 Request log cleared');
@@ -464,11 +440,6 @@ function createWindow() {
   // 监听页面标题变化事件
   mainWindow.webContents.on('page-title-updated', (event) => {
     event.preventDefault(); // 阻止页面修改标题
-    mainWindow.setTitle('Convbased Desktop');
-  });
-
-  // 页面开始加载时设置标题
-  mainWindow.webContents.on('did-start-loading', () => {
     mainWindow.setTitle('Convbased Desktop');
   });
 
@@ -598,7 +569,7 @@ function createWindow() {
         // 检查跨域隔离状态
         console.log('crossOriginIsolated:', window.crossOriginIsolated);
         
-        // fetch请求监控已在上面统一处理，这里不再重复声明
+        // fetch请求监控已统一处理
        
        // 确保音频元素可用于WebRTC
         window.ensureAudioElement = function() {
@@ -699,16 +670,6 @@ function createWindow() {
      `);
   });
 
-  // 页面导航时设置标题
-  mainWindow.webContents.on('did-navigate', () => {
-    mainWindow.setTitle('Convbased Desktop');
-  });
-
-  // 页面导航完成时设置标题
-  mainWindow.webContents.on('did-navigate-in-page', () => {
-    mainWindow.setTitle('Convbased Desktop');
-  });
-
   // 定期检查标题（作为备用机制）
   const titleInterval = setInterval(forceTitle, 100); // 每100ms检查一次
   
@@ -744,27 +705,11 @@ function createWindow() {
     console.error('WebContents crashed:', { killed });
   });
 
-  mainWindow.webContents.on('unresponsive', () => {
-    console.error('WebContents became unresponsive');
-  });
-
-  mainWindow.webContents.on('responsive', () => {
-    console.log('WebContents became responsive again');
-  });
-
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     console.error('Failed to load:', { errorCode, errorDescription, validatedURL, isMainFrame });
   });
 
-  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-    // Filter out common Electron warnings
-    if (message.includes('Script failed to execute') || 
-        message.includes('UnhandledPromiseRejectionWarning')) {
-      console.log('[Filtered Console Message]:', message);
-      return;
-    }
-    console.log(`Console [${level}]:`, message);
-  });
+
 
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -907,33 +852,19 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
 });
 
-// Handle renderer process crashes
-app.on('render-process-gone', (event, webContents, details) => {
-  console.error('Renderer process gone:', details);
-});
-
-// Handle child process crashes
-app.on('child-process-gone', (event, details) => {
-  console.error('Child process gone:', details);
-});
-
 // Called when Electron has finished initialization and is ready to create browser windows
 app.whenReady().then(() => {
-  // Set permission handler to allow all media access requests
+  // Set permission handlers to allow all media access requests
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     console.log('Permission requested:', permission);
-    // Allow all permission requests including microphone, camera, notifications, etc.
     callback(true);
   });
   
-  // Set permission check handler
   session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     console.log('Permission check:', permission, 'from:', requestingOrigin);
-    // Allow all permission checks
     return true;
   });
   
-  // 设置设备权限处理器
   session.defaultSession.setDevicePermissionHandler((details) => {
     console.log('Device permission requested:', details);
     return true;
@@ -942,53 +873,6 @@ app.whenReady().then(() => {
   // Handle certificate errors
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
     callback(0); // Ignore all certificate errors
-  });
-  
-  // Disable network security policies and add cross-origin isolation support
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const responseHeaders = {
-      ...details.responseHeaders,
-      'Access-Control-Allow-Origin': ['*'],
-      'Access-Control-Allow-Methods': ['GET, POST, PUT, DELETE, OPTIONS'],
-      'Access-Control-Allow-Headers': ['*']
-    };
-    
-    // Completely remove CSP to avoid restrictions
-    delete responseHeaders['Content-Security-Policy'];
-    delete responseHeaders['content-security-policy'];
-    
-    // For WASM files, use more relaxed cross-origin policy
-    if (details.url.includes('.wasm') || details.url.includes('wasm')) {
-      responseHeaders['Cross-Origin-Embedder-Policy'] = ['credentialless'];
-      responseHeaders['Cross-Origin-Opener-Policy'] = ['unsafe-none'];
-      responseHeaders['Cross-Origin-Resource-Policy'] = ['cross-origin'];
-    } else {
-      // 对于其他资源，保持原有的跨域隔离设置
-      responseHeaders['Cross-Origin-Embedder-Policy'] = ['require-corp'];
-      responseHeaders['Cross-Origin-Opener-Policy'] = ['same-origin'];
-      responseHeaders['Cross-Origin-Resource-Policy'] = ['cross-origin'];
-    }
-    
-    callback({ responseHeaders });
-  });
-  
-  // Add request headers to support SharedArrayBuffer and WASM
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    // For WASM file requests, use more relaxed policy
-    if (details.url.includes('.wasm') || details.url.includes('wasm')) {
-      details.requestHeaders['Cross-Origin-Embedder-Policy'] = 'credentialless';
-      details.requestHeaders['Cross-Origin-Opener-Policy'] = 'unsafe-none';
-    } else {
-      details.requestHeaders['Cross-Origin-Embedder-Policy'] = 'require-corp';
-      details.requestHeaders['Cross-Origin-Opener-Policy'] = 'same-origin';
-    }
-    
-    // Add general CORS headers
-    details.requestHeaders['Access-Control-Allow-Origin'] = '*';
-    details.requestHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
-    details.requestHeaders['Access-Control-Allow-Headers'] = '*';
-    
-    callback({ requestHeaders: details.requestHeaders });
   });
   
   createWindow();
@@ -1058,8 +942,6 @@ ipcMain.handle('hide-window', () => {
   mainWindow.hide();
 });
 
-// 设置相关的IPC处理程序已移除，现在使用托盘菜单直接设置
-
 // 处理关闭对话框结果
 ipcMain.on('close-dialog-result', (event, result) => {
   if (closeDialogWindow) {
@@ -1080,12 +962,4 @@ ipcMain.on('close-dialog-result', (event, result) => {
   
   // 执行关闭动作
   handleCloseAction(result.action);
-});
-
-// 防止应用被意外关闭
-app.on('web-contents-created', (event, contents) => {
-  contents.on('new-window', (event, navigationUrl) => {
-    event.preventDefault();
-    shell.openExternal(navigationUrl);
-  });
 });
